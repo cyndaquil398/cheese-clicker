@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cheese Clicker</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: Arial, sans-serif; color: #4b3210;
+    background: linear-gradient(135deg, #fff4c2, #f5d46b);
+    min-height: 100vh; padding: 24px;
+  }
+  .game { max-width: 1050px; margin: auto; }
+  header { text-align: center; margin-bottom: 22px; }
+  h1 { margin: 0 0 8px; font-size: clamp(2.2rem, 6vw, 4rem); }
+  .subtitle { margin: 0; }
+  .stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin: 22px 0;
+  }
+  .stat, .panel {
+    background: rgba(255,255,255,.78); border: 2px solid #d8a92f;
+    border-radius: 18px; padding: 16px; box-shadow: 0 5px 14px #8d641c22;
+  }
+  .stat { text-align: center; }
+  .stat strong { display: block; font-size: 1.6rem; margin-top: 5px; }
+  .columns { display: grid; grid-template-columns: minmax(240px, .9fr) minmax(300px, 1.1fr); gap: 18px; }
+  .click-area { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 390px; }
+  #cheese {
+    border: 0; background: transparent; cursor: pointer; font-size: clamp(130px, 24vw, 220px);
+    line-height: 1; filter: drop-shadow(0 10px 5px #6b471c44);
+    transition: transform .08s;
+  }
+  #cheese:active { transform: scale(.92) rotate(-5deg); }
+  #clickMessage { min-height: 24px; font-weight: bold; }
+  .upgrade-list { display: grid; gap: 10px; max-height: 570px; overflow: auto; padding-right: 4px; }
+  .upgrade {
+    display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
+    border: 2px solid #dfb84e; border-radius: 13px; padding: 12px;
+    background: #fff9df; color: #4b3210; cursor: pointer;
+  }
+  .upgrade:hover:not(:disabled) { background: #ffefb1; transform: translateY(-1px); }
+  .upgrade:disabled { opacity: .55; cursor: not-allowed; }
+  .upgrade .emoji { font-size: 32px; width: 42px; text-align: center; }
+  .upgrade .details { flex: 1; }
+  .upgrade .name { font-weight: bold; font-size: 1rem; }
+  .upgrade small { display: block; margin-top: 4px; line-height: 1.35; }
+  .cost { font-weight: bold; white-space: nowrap; }
+  .bottom { display: flex; justify-content: center; margin-top: 18px; }
+  #reset { border: 0; background: #8e4d20; color: white; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+  #reset:hover { background: #6f3918; }
+  @media (max-width: 700px) {
+    body { padding: 14px; }
+    .columns { grid-template-columns: 1fr; }
+    .click-area { min-height: 300px; }
+    .stats { gap: 7px; }
+    .stat { padding: 10px 5px; font-size: .85rem; }
+    .stat strong { font-size: 1.2rem; }
+    .upgrade-list { max-height: none; }
+  }
+</style>
+</head>
+<body>
+<div class="game">
+  <header>
+    <h1>🧀 Cheese Clicker 🧀</h1>
+    <p class="subtitle">Click cheese. Buy upgrades. Build a cheesy empire!</p>
+  </header>
+
+  <section class="stats">
+    <div class="stat">Total cheese<strong id="cheeseCount">0</strong></div>
+    <div class="stat">Per click<strong id="perClick">1</strong></div>
+    <div class="stat">Per second<strong id="perSecond">0</strong></div>
+  </section>
+
+  <main class="columns">
+    <section class="panel click-area">
+      <button id="cheese" aria-label="Click the cheese">🧀</button>
+      <p id="clickMessage">Click the cheese to get started!</p>
+    </section>
+
+    <section class="panel">
+      <h2>🛒 Upgrade Shop</h2>
+      <div class="upgrade-list" id="upgradeList"></div>
+    </section>
+  </main>
+
+  <div class="bottom"><button id="reset">Reset game</button></div>
+</div>
+
+<script>
+const upgrades = [
+  { id:"mouse", name:"Cheese Mouse", emoji:"🐭", description:"+1 cheese per click", base:15, click:1 },
+  { id:"knife", name:"Cheese Knife", emoji:"🔪", description:"+5 cheese per click", base:100, click:5 },
+  { id:"army", name:"Mouse Army", emoji:"🐁", description:"+1 cheese per second", base:50, cps:1 },
+  { id:"mine", name:"Cheese Mine", emoji:"⛏️", description:"+8 cheese per second", base:350, cps:8 },
+  { id:"factory", name:"Cheese Factory", emoji:"🏭", description:"+40 cheese per second", base:1800, cps:40 },
+  { id:"moon", name:"Moon Cheese Lab", emoji:"🌙", description:"+200 cheese per second", base:9000, cps:200 },
+  { id:"parmesan", name:"Parmesan Press", emoji:"🧀", description:"+25 cheese per click", base:2500, click:25 },
+  { id:"goat", name:"Goat Farm", emoji:"🐐", description:"+750 cheese per second", base:35000, cps:750 },
+  { id:"fleet", name:"Dairy Delivery Fleet", emoji:"🚚", description:"+2,500 cheese per second", base:125000, cps:2500 },
+  { id:"castle", name:"Cheese Castle", emoji:"🏰", description:"+10,000 cheese per second", base:600000, cps:10000 },
+  { id:"galaxy", name:"Cheese Galaxy", emoji:"🌌", description:"+50,000 cheese per second", base:3000000, cps:50000 },
+  { id:"dimension", name:"Cheese Dimension", emoji:"🌀", description:"+250,000 cheese per second", base:15000000, cps:250000 }
+];
+
+let state = { cheese: 0, owned: {} };
+try {
+  const saved = JSON.parse(localStorage.getItem("cheeseClickerSave"));
+  if (saved && typeof saved.cheese === "number" && saved.owned) state = saved;
+} catch (e) {}
+
+const $ = id => document.getElementById(id);
+const format = n => {
+  if (n < 1000000) return Math.floor(n).toLocaleString();
+  const units = ["M","B","T","Qa","Qi"];
+  let i = -1;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+  return n.toFixed(2) + units[i];
+};
+const owned = id => state.owned[id] || 0;
+const cost = u => Math.floor(u.base * Math.pow(1.16, owned(u.id)));
+const perClick = () => 1 + upgrades.reduce((sum,u) => sum + (u.click || 0) * owned(u.id), 0);
+const perSecond = () => upgrades.reduce((sum,u) => sum + (u.cps || 0) * owned(u.id), 0);
+
+function save() {
+  try { localStorage.setItem("cheeseClickerSave", JSON.stringify(state)); } catch(e) {}
+}
+function render() {
+  $("cheeseCount").textContent = format(state.cheese);
+  $("perClick").textContent = format(perClick());
+  $("perSecond").textContent = format(perSecond());
+  $("upgradeList").innerHTML = "";
+  upgrades.forEach(u => {
+    const price = cost(u);
+    const button = document.createElement("button");
+    button.className = "upgrade";
+    button.disabled = state.cheese < price;
+    button.innerHTML = `<span class="emoji">${u.emoji}</span>
+      <span class="details"><span class="name">${u.name} <span style="font-weight:normal">(${owned(u.id)})</span></span>
+      <small>${u.description}</small></span><span class="cost">${format(price)} 🧀</span>`;
+    button.addEventListener("click", () => {
+      if (state.cheese < price) return;
+      state.cheese -= price;
+      state.owned[u.id] = owned(u.id) + 1;
+      save(); render();
+    });
+    $("upgradeList").appendChild(button);
+  });
+}
+$("cheese").addEventListener("click", () => {
+  state.cheese += perClick();
+  $("clickMessage").textContent = `+${format(perClick())} cheese!`;
+  save(); render();
+});
+$("reset").addEventListener("click", () => {
+  if (confirm("Are you sure you want to reset all your cheese and upgrades?")) {
+    state = { cheese: 0, owned: {} }; save(); render();
+    $("clickMessage").textContent = "Fresh cheese empire! Start clicking.";
+  }
+});
+setInterval(() => {
+  const income = perSecond();
+  if (income > 0) { state.cheese += income; save(); render(); }
+}, 1000);
+render();
+</script>
+</body>
+</html>
