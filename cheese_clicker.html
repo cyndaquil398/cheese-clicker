@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cheese Clicker</title>
+<style>
+  :root { --gold:#f6c84b; --cream:#fff6d9; --brown:#57391f; --orange:#e89a28; }
+  * { box-sizing:border-box }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui, sans-serif; color:var(--brown);
+    background:radial-gradient(circle at top,#fff4c5,#f2c66d 70%,#d9953e);
+    display:flex; justify-content:center; padding:28px 14px;
+  }
+  .game { width:min(760px,100%); text-align:center; }
+  h1 { margin:0 0 5px; font-size:clamp(2rem,7vw,3.2rem); text-shadow:2px 3px #fff0b0; }
+  .subtitle { margin:0 0 18px; opacity:.8; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px; }
+  .stat,.panel { background:#fff8dfd9; border:3px solid #b9782e; border-radius:18px; padding:12px; box-shadow:0 5px 0 #a96525; }
+  .stat strong { display:block; font-size:clamp(1.1rem,4vw,1.7rem); }
+  .stat span { font-size:.85rem; }
+  .cheese-area { padding:18px 10px 22px; background:#ffe8a7aa; border:3px dashed #b9782e; border-radius:22px; }
+  #cheese {
+    border:0; background:transparent; cursor:pointer; font-size:clamp(115px,30vw,190px);
+    line-height:1.2; filter:drop-shadow(0 9px 2px #a76c2b66); transition:transform .08s;
+    user-select:none; touch-action:manipulation;
+  }
+  #cheese:active { transform:scale(.9) rotate(-7deg); }
+  .hint { margin:2px 0 0; font-weight:700; }
+  #floaters { height:28px; position:relative; font-weight:900; color:#9b5a16; }
+  .shop-title { margin:25px 0 10px; }
+  .shop { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; text-align:left; }
+  .upgrade { display:flex; align-items:center; gap:10px; background:#fff8df; border:2px solid #bd813a; border-radius:15px; padding:12px; }
+  .upgrade .emoji { font-size:2rem; }
+  .upgrade .info { flex:1; min-width:0; }
+  .upgrade strong { display:block; }
+  .upgrade small { display:block; opacity:.8; }
+  button.buy { border:0; border-radius:10px; padding:9px 11px; background:#d98a24; color:white; font-weight:800; cursor:pointer; }
+  button.buy:disabled { background:#b7a58b; cursor:not-allowed; }
+  .bottom { display:flex; justify-content:center; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  .utility { border:2px solid #9e6327; background:#fff3c9; color:#69451f; border-radius:12px; padding:9px 14px; font-weight:700; cursor:pointer; }
+  #message { min-height:24px; margin-top:12px; font-weight:700; }
+  @media(max-width:420px){ .stats{gap:6px}.stat{padding:9px 3px}.stat span{font-size:.72rem} }
+</style>
+</head>
+<body>
+<main class="game">
+  <h1>🧀 Cheese Clicker</h1>
+  <p class="subtitle">Click cheese. Get cheese. Become the big cheese.</p>
+  <section class="stats">
+    <div class="stat"><strong id="cheeseCount">0</strong><span>🧀 Cheese</span></div>
+    <div class="stat"><strong id="perClick">1</strong><span>Cheese per click</span></div>
+    <div class="stat"><strong id="perSecond">0</strong><span>Cheese per second</span></div>
+  </section>
+  <section class="cheese-area">
+    <button id="cheese" aria-label="Click the cheese">🧀</button>
+    <p class="hint">CLICK THE CHEESE!</p>
+    <div id="floaters"></div>
+  </section>
+  <h2 class="shop-title">🛒 Cheese Shop</h2>
+  <section class="shop" id="shop"></section>
+  <div class="bottom">
+    <button class="utility" id="saveBtn">Save game</button>
+    <button class="utility" id="resetBtn">Reset game</button>
+  </div>
+  <div id="message" role="status">Your cheesy empire starts now.</div>
+</main>
+<script>
+(() => {
+  const upgrades = [
+    {id:'mouse', name:'Cheese Mouse', emoji:'🐭', description:'+1 cheese per click', base:15, click:1, cps:0},
+    {id:'knife', name:'Cheese Knife', emoji:'🔪', description:'+5 cheese per click', base:100, click:5, cps:0},
+    {id:'mouseArmy', name:'Mouse Army', emoji:'🐁', description:'+1 cheese per second', base:50, click:0, cps:1},
+    {id:'cheeseMine', name:'Cheese Mine', emoji:'⛏️', description:'+8 cheese per second', base:350, click:0, cps:8},
+    {id:'cheeseFactory', name:'Cheese Factory', emoji:'🏭', description:'+40 cheese per second', base:1800, click:0, cps:40},
+    {id:'moon', name:'Moon Cheese Lab', emoji:'🌙', description:'+200 cheese per second', base:9000, click:0, cps:200}
+  ];
+  let state = {cheese:0, clickPower:1, cps:0, owned:{}};
+  const $ = id => document.getElementById(id);
+  const cost = u => Math.floor(u.base * Math.pow(1.16, state.owned[u.id] || 0));
+  function render() {
+    $('cheeseCount').textContent = Math.floor(state.cheese).toLocaleString();
+    $('perClick').textContent = state.clickPower.toLocaleString();
+    $('perSecond').textContent = state.cps.toLocaleString();
+    $('shop').innerHTML = upgrades.map(u => {
+      const price = cost(u), owned = state.owned[u.id] || 0;
+      return `<article class="upgrade"><div class="emoji">${u.emoji}</div><div class="info"><strong>${u.name} <span style="opacity:.65">x${owned}</span></strong><small>${u.description}</small><small>Cost: ${price.toLocaleString()} 🧀</small></div><button class="buy" data-id="${u.id}" ${state.cheese < price ? 'disabled' : ''}>Buy</button></article>`;
+    }).join('');
+  }
+  function clickCheese() {
+    state.cheese += state.clickPower;
+    $('floaters').textContent = `+${state.clickPower} 🧀`;
+    render();
+  }
+  $('cheese').addEventListener('click', clickCheese);
+  $('shop').addEventListener('click', e => {
+    const id = e.target.dataset.id;
+    if (!id) return;
+    const u = upgrades.find(x => x.id === id), price = cost(u);
+    if (state.cheese < price) return;
+    state.cheese -= price;
+    state.owned[id] = (state.owned[id] || 0) + 1;
+    state.clickPower += u.click;
+    state.cps += u.cps;
+    $('message').textContent = `${u.name} purchased! The cheese business is booming.`;
+    render();
+  });
+  setInterval(() => { state.cheese += state.cps; render(); }, 1000);
+  $('saveBtn').addEventListener('click', () => {
+    localStorage.setItem('cheeseClickerSave', JSON.stringify(state));
+    $('message').textContent = 'Game saved on this device!';
+  });
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('Reset all your cheese and upgrades?')) return;
+    state = {cheese:0, clickPower:1, cps:0, owned:{}};
+    localStorage.removeItem('cheeseClickerSave');
+    $('message').textContent = 'Fresh start. Back to cheesiness!';
+    render();
+  });
+  try {
+    const saved = JSON.parse(localStorage.getItem('cheeseClickerSave'));
+    if (saved && typeof saved.cheese === 'number' && saved.owned) state = saved;
+  } catch (_) {}
+  render();
+})();
+</script>
+</body>
+</html>
